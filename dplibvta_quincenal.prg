@@ -14,7 +14,7 @@ PROCE MAIN(oLibCom,oBtnBrw,cWhereLib)
 
   cWhereLib:="DOC_CODSUC"+GetWhere("=",oDp:cSucursal)
 
-  cWhere   := " INNER JOIN dpdiario ON DIA_FECHA=DOC_FCHDEC  "+;
+  cWhere   := " INNER JOIN dpdiario ON DIA_FECHA=DOC_FECHA  "+;
               " INNER JOIN dptipdoccli ON DOC_TIPDOC=TDC_TIPO AND TDC_LIBVTA=1 "+;
               " WHERE "+cWhereLib+" AND DOC_TIPTRA"+GetWhere("=","D")+" AND DOC_ACT=1"
 
@@ -29,11 +29,11 @@ PROCE MAIN(oLibCom,oBtnBrw,cWhereLib)
 
   IF !Empty(cCodigo)
 
-     IF DAY(oDp:aLine[3])<=15
-        oDp:dFchIniDoc:=FCHINIMES(oDp:aLine[3])
+     IF DAY(oDp:aLine[4])<=15
+        oDp:dFchIniDoc:=FCHINIMES(oDp:aLine[4])
         oDp:dFchFinDoc:=oDp:dFchIniDoc+14
      ELSE
-       oDp:dFchIniDoc:=CTOD("15/"+CTOO(oDp:aLine[2],"C")+"/"+CTOO(oDp:aLine[1],"C"))
+       oDp:dFchIniDoc:=CTOD("15/"+SUBS(DTOC(oDp:aLine[4]),3,10))
        oDp:dFchFinDoc:=FCHFINMES(oDp:dFchIniDoc)
      ENDIF
 

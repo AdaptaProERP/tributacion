@@ -29,11 +29,11 @@ PROCE MAIN(oLibCom,oBtnBrw,cWhereLib)
 
   IF !Empty(cCodigo)
 
-     IF DAY(oDp:aLine[3])<=15
-        oDp:dFchIniDoc:=FCHINIMES(oDp:aLine[3])
+     IF DAY(oDp:aLine[4])<=15
+        oDp:dFchIniDoc:=FCHINIMES(oDp:aLine[4])
         oDp:dFchFinDoc:=oDp:dFchIniDoc+14
      ELSE
-       oDp:dFchIniDoc:=CTOD("15/"+CTOO(oDp:aLine[2],"C")+"/"+CTOO(oDp:aLine[1],"C"))
+       oDp:dFchIniDoc:=CTOD("15/"+SUBS(DTOC(oDp:aLine[4]),3,10))
        oDp:dFchFinDoc:=FCHFINMES(oDp:dFchIniDoc)
      ENDIF
 

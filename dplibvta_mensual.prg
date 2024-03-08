@@ -14,8 +14,8 @@ PROCE MAIN(oLibCom,oBtnBrw,cWhereLib)
 
   cWhereLib:="DOC_CODSUC"+GetWhere("=",oDp:cSucursal)
 
-  cWhere   := " INNER JOIN dpdiario ON DIA_FECHA=DOC_FCHDEC  "+;
-              " INNER JOIN dptipdocpro ON DOC_TIPDOC=TDC_TIPO AND TDC_LIBCOM=1 "+;
+  cWhere   := " INNER JOIN dpdiario    ON DIA_FECHA=DOC_FECHA  "+;
+              " INNER JOIN dptipdoccli ON DOC_TIPDOC=TDC_TIPO AND TDC_LIBVTA=1 "+;
               " WHERE "+cWhereLib+" AND DOC_TIPTRA"+GetWhere("=","D")+" AND DOC_ACT=1"
 
   cOrderBy  :="  GROUP BY DIA_ANO,DIA_MES  ORDER BY CONCAT(DIA_ANO,DIA_MES) DESC "
@@ -25,7 +25,7 @@ PROCE MAIN(oLibCom,oBtnBrw,cWhereLib)
   oDp:aSize      :={50 ,50 ,80 ,80 ,40}
   oDp:lFullHeight:=.T.
 
-  cCodigo:=EJECUTAR("REPBDLIST","DPDOCPRO","DIA_ANO,DIA_MES,MIN(DIA_FECHA) AS DESDE,MAX(DIA_FECHA) AS HASTA,COUNT(*) AS CUANTOS",.F.,cWhere,cTitle,aTitle,cFind,cFilter,cSgdoVal,cOrderBy,oBtnBrw)
+  cCodigo:=EJECUTAR("REPBDLIST","DPDOCCLI","DIA_ANO,DIA_MES,MIN(DIA_FECHA) AS DESDE,MAX(DIA_FECHA) AS HASTA,COUNT(*) AS CUANTOS",.F.,cWhere,cTitle,aTitle,cFind,cFilter,cSgdoVal,cOrderBy,oBtnBrw)
 
   IF !Empty(cCodigo)
 
