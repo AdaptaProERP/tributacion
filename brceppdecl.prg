@@ -8,12 +8,12 @@
 
 #INCLUDE "DPXBASE.CH"
 
-PROCE MAIN(cWhere,cCodSuc,nPeriodo,dDesde,dHasta,cTitle,cNumReg)
+PROCE MAIN(cWhere,cCodSuc,nPeriodo,dDesde,dHasta,cTitle,cNumReg,lFecha)
    LOCAL aData,aFechas,cFileMem:="USER\BRCEPPDECL.MEM",V_nPeriodo:=1,cCodPar
    LOCAL V_dDesde:=CTOD(""),V_dHasta:=CTOD("")
    LOCAL cServer:=oDp:cRunServer
    LOCAL lConectar:=.F.
-   LOCAL aFields  :={}
+   LOCAL aFields  :={},cTipDoc:="CEP",dFecha
 
    oDp:cRunServer:=NIL
 
@@ -70,6 +70,7 @@ PROCE MAIN(cWhere,cCodSuc,nPeriodo,dDesde,dHasta,cTitle,cNumReg)
 
    ENDIF
 
+/*
    IF .F.
 
       IF nPeriodo=10
@@ -85,10 +86,16 @@ PROCE MAIN(cWhere,cCodSuc,nPeriodo,dDesde,dHasta,cTitle,cNumReg)
 
 
    ELSEIF (.T.)
+*/
 
      aData :=LEERDATA(HACERWHERE(dDesde,dHasta,cWhere),NIL,cServer,NIL)
 
-   ENDIF
+//   ENDIF
+
+
+   DEFAULT cNumReg:=EJECUTAR("GETNUMPLAFISCAL",oDp:cSucursal,cTipDoc,dHasta+1)
+
+  // ? cNumReg,dHasta
 
    aFields:=ACLONE(oDp:aFields) // genera los campos Virtuales
 
@@ -112,8 +119,6 @@ FUNCTION ViewData(aData,cTitle,cWhere_)
 
    DEFINE FONT oFont  NAME "Tahoma"   SIZE 0, -12
    DEFINE FONT oFontB NAME "Tahoma"   SIZE 0, -12 BOLD
-
-
 
 
    DpMdi(cTitle,"oCEPPDECL","BRCEPPDECL.EDT")
@@ -146,7 +151,10 @@ FUNCTION ViewData(aData,cTitle,cWhere_)
    oCEPPDECL:lBarDef  :=.T. // Activar Modo Diseño.
    oCEPPDECL:aFields  :=ACLONE(aFields)
    oCEPPDECL:cNumReg  :=cNumReg
-
+   oCEPPDECL:lFecha   :=lFecha
+   oCEPPDECL:dFecha   :=SQLGET("DPDOCPROPROG","PLP_FECHA","PLP_CODSUC"+GetWhere("=",cCodSuc)+" AND "+;
+                                                          "PLP_TIPDOC"+GetWhere("=",cTipDoc)+" AND "+;
+                                                          "PLP_NUMREG"+GetWhere("=",cNumReg))
    oCEPPDECL:nClrPane1:=oDp:nClrPane1
    oCEPPDECL:nClrPane2:=oDp:nClrPane2
 
@@ -290,9 +298,9 @@ FUNCTION ViewData(aData,cTitle,cWhere_)
 
    oCEPPDECL:oWnd:oClient := oCEPPDECL:oBrw
 
-
-
    oCEPPDECL:Activate({||oCEPPDECL:ViewDatBar()})
+
+   oCEPPDECL:oPeriodo:ForWhen(.T.)
 
    oCEPPDECL:BRWRESTOREPAR()
 
@@ -713,11 +721,6 @@ ENDIF
   nCol:=15
   nLin:=70
 
-//nLin:=<NLIN> // 08
-// Controles se Inician luego del Ultimo Boton
-//  nCol:=32
-//  AEVAL(oBar:aControls,{|o,n|nCol:=nCol+o:nWidth() })
-
   //
   // Campo : Periodo
   //
@@ -728,7 +731,7 @@ ENDIF
                 OF oBar;
                 FONT oFont;
                 ON CHANGE oCEPPDECL:LEEFECHAS();
-                WHEN oCEPPDECL:lWhen
+                WHEN oCEPPDECL:lWhen .AND. .F.
 
 
   ComboIni(oCEPPDECL:oPeriodo )
@@ -781,12 +784,33 @@ ENDIF
                PIXEL;
                WHEN oCEPPDECL:oPeriodo:nAt=LEN(oCEPPDECL:oPeriodo:aItems);
                ACTION oCEPPDECL:HACERWHERE(oCEPPDECL:dDesde,oCEPPDECL:dHasta,oCEPPDECL:cWhere,.T.);
-               WHEN oCEPPDECL:lWhen
+               WHEN oCEPPDECL:lWhen .AND. .F.
 
   BMPGETBTN(oBar,oFont,13)
 
   AEVAL(oBar:aControls,{|o|o:ForWhen(.T.)})
 
+IF !Empty(oCEPPDECL:cNumReg)
+
+  DEFINE FONT oFont  NAME "Tahoma"   SIZE 0, -12 BOLD UNDERLINE
+
+  @ nLin,nCol+400 SAYREF oCEPPDECL:oNumReg PROMPT " #Planificación "+oCEPPDECL:cNumReg+" " OF oBar;
+                  SIZE 190,20 ;
+                  PIXEL COLOR oDp:nClrYellowText,oDp:nClrYellow FONT oFont 
+
+  IF !oCEPPDECL:oNumReg=NIL
+     SayAction(oCEPPDECL:oNumReg,{||oCEPPDECL:VERREGPLA()})
+  ENDIF
+
+  @ nLin,nCol+620 SAYREF oCEPPDECL:oFecha PROMPT " Fecha Pago "+DTOC(oCEPPDECL:dFecha)+" " OF oBar;
+                  SIZE 190,20 ;
+                  PIXEL COLOR oDp:nClrYellowText,oDp:nClrYellow FONT oFont 
+
+  SayAction(oCEPPDECL:oFecha,{||oCEPPDECL:VERREGPLA()})
+
+ENDIF
+
+//  @ nLin, nCol+500 SAY oCEPPDECL:cNumReg OF oBar FONT oFont BORDER PIXEL
 
 
 RETURN .T.
@@ -1109,6 +1133,12 @@ RETURN .T.
 /*
 // Genera Correspondencia Masiva
 */
+
+FUNCTION VERREGPLA()
+   LOCAL cWhere:="PLP_TIPDOC"+GetWhere("=","CEP")+" AND PLP_NUMREG"+GetWhere("=",oCEPPDECL:cNumReg)
+   LOCAL cTitle:=NIL,lData:=NIL
+
+RETURN EJECUTAR("BRCALFISDET",cWhere,oDp:cSucursal,11,CTOD(""),CTOD(""),cTitle,lData)
 
 
 // EOF
