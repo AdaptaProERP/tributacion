@@ -13,7 +13,7 @@ PROCE MAIN(cWhere,cCodSuc,nPeriodo,dDesde,dHasta,cTitle,cNumReg,lFecha)
    LOCAL V_dDesde:=CTOD(""),V_dHasta:=CTOD("")
    LOCAL cServer:=oDp:cRunServer
    LOCAL lConectar:=.F.
-   LOCAL aFields  :={},cTipDoc:="CEP",dFecha
+   LOCAL aFields  :={},cTipDoc:="CEP",dFecha:=NIL
 
    oDp:cRunServer:=NIL
 
@@ -70,33 +70,22 @@ PROCE MAIN(cWhere,cCodSuc,nPeriodo,dDesde,dHasta,cTitle,cNumReg,lFecha)
 
    ENDIF
 
-/*
-   IF .F.
+   DEFAULT cNumReg:=EJECUTAR("GETNUMPLAFISCAL",oDp:cSucursal,cTipDoc,dHasta+1),;
+           dFecha :=SQLGET("DPDOCPROPROG","PLP_FECHA","PLP_CODSUC"+GetWhere("=",cCodSuc)+" AND "+;
+                                          "PLP_TIPDOC"+GetWhere("=",cTipDoc)+" AND "+;
+                                          "PLP_NUMREG"+GetWhere("=",cNumReg))
 
-      IF nPeriodo=10
-        dDesde :=V_dDesde
-        dHasta :=V_dHasta
-      ELSE
-        aFechas:=EJECUTAR("DPDIARIOGET",nPeriodo,dDesde,dDesde,dHasta)
-        dDesde :=aFechas[1]
-        dHasta :=aFechas[2]
-      ENDIF
+   IF Empty(cNumReg)
 
-     aData :=LEERDATA(HACERWHERE(dDesde,dHasta,cWhere),NIL,cServer,NIL)
+     EJECUTAR("CEPP_CALFIS2024")
 
+     cNumReg:=EJECUTAR("GETNUMPLAFISCAL",oDp:cSucursal,cTipDoc,dHasta+1)
+     dFecha :=SQLGET("DPDOCPROPROG","PLP_FECHA","PLP_CODSUC"+GetWhere("=",cCodSuc)+" AND "+;
+                                    "PLP_TIPDOC"+GetWhere("=",cTipDoc)+" AND "+;
+                                    "PLP_NUMREG"+GetWhere("=",cNumReg))
+   ENDIF
 
-   ELSEIF (.T.)
-*/
-
-     aData :=LEERDATA(HACERWHERE(dDesde,dHasta,cWhere),NIL,cServer,NIL)
-
-//   ENDIF
-
-
-   DEFAULT cNumReg:=EJECUTAR("GETNUMPLAFISCAL",oDp:cSucursal,cTipDoc,dHasta+1)
-
-  // ? cNumReg,dHasta
-
+   aData  :=LEERDATA(HACERWHERE(dDesde,dHasta,cWhere),NIL,cServer,NIL)
    aFields:=ACLONE(oDp:aFields) // genera los campos Virtuales
 
    IF Empty(aData)
@@ -152,9 +141,8 @@ FUNCTION ViewData(aData,cTitle,cWhere_)
    oCEPPDECL:aFields  :=ACLONE(aFields)
    oCEPPDECL:cNumReg  :=cNumReg
    oCEPPDECL:lFecha   :=lFecha
-   oCEPPDECL:dFecha   :=SQLGET("DPDOCPROPROG","PLP_FECHA","PLP_CODSUC"+GetWhere("=",cCodSuc)+" AND "+;
-                                                          "PLP_TIPDOC"+GetWhere("=",cTipDoc)+" AND "+;
-                                                          "PLP_NUMREG"+GetWhere("=",cNumReg))
+   oCEPPDECL:dFecha   :=dFecha
+
    oCEPPDECL:nClrPane1:=oDp:nClrPane1
    oCEPPDECL:nClrPane2:=oDp:nClrPane2
 
@@ -174,7 +162,7 @@ FUNCTION ViewData(aData,cTitle,cWhere_)
    oCEPPDECL:lBtnMenuBrw :=.F.
    oCEPPDECL:lBtnSave    :=.F.
    oCEPPDECL:lBtnCrystal :=.F.
-   oCEPPDECL:lBtnRefresh :=.F.
+   oCEPPDECL:lBtnRefresh :=.T.
    oCEPPDECL:lBtnHtml    :=.T.
    oCEPPDECL:lBtnExcel   :=.T.
    oCEPPDECL:lBtnPreview :=.T.
@@ -197,9 +185,6 @@ FUNCTION ViewData(aData,cTitle,cWhere_)
    oCEPPDECL:nClrText2:=0
    oCEPPDECL:nClrText3:=0
 
-
-
-
    oCEPPDECL:oBrw:=TXBrowse():New( IF(oCEPPDECL:lTmdi,oCEPPDECL:oWnd,oCEPPDECL:oDlg ))
    oCEPPDECL:oBrw:SetArray( aData, .F. )
    oCEPPDECL:oBrw:SetFont(oFont)
@@ -210,14 +195,10 @@ FUNCTION ViewData(aData,cTitle,cWhere_)
    oCEPPDECL:oBrw:nDataLines  := 1
    oCEPPDECL:oBrw:nFooterLines:= 1
 
-
-
-
    oCEPPDECL:aData            :=ACLONE(aData)
 
    AEVAL(oCEPPDECL:oBrw:aCols,{|oCol|oCol:oHeaderFont:=oFontB})
-
-   
+  
 
   // Campo: CYC_CODCLA
   oCol:=oCEPPDECL:oBrw:aCols[oCEPPDECL:COL_CYC_CODCLA]
@@ -228,8 +209,8 @@ FUNCTION ViewData(aData,cTitle,cWhere_)
   // Campo: CLA_DESCRI
   oCol:=oCEPPDECL:oBrw:aCols[oCEPPDECL:COL_CLA_DESCRI]
   oCol:cHeader      :='Descripción'
-  oCol:bLClickHeader := {|r,c,f,o| SortArray( o, oCEPPDECL:oBrw:aArrayData ) } 
-  oCol:nWidth       := 360
+  oCol:bLClickHeader:= {|r,c,f,o| SortArray( o, oCEPPDECL:oBrw:aArrayData ) } 
+  oCol:nWidth       := 280
 
   // Campo: SUM(HIS_MONTO)
   oCol:=oCEPPDECL:oBrw:aCols[3]
@@ -284,9 +265,6 @@ FUNCTION ViewData(aData,cTitle,cWhere_)
                                                  nClrText:=IF(.F.,oCEPPDECL:nClrText2,nClrText),;
                                                  {nClrText,iif( oBrw:nArrayAt%2=0, oCEPPDECL:nClrPane1, oCEPPDECL:nClrPane2 ) } }
 
-//   oCEPPDECL:oBrw:bClrHeader            := {|| {0,14671839 }}
-//   oCEPPDECL:oBrw:bClrFooter            := {|| {0,14671839 }}
-
    oCEPPDECL:oBrw:bClrHeader          := {|| { oDp:nLbxClrHeaderText, oDp:nLbxClrHeaderPane}}
    oCEPPDECL:oBrw:bClrFooter          := {|| { oDp:nLbxClrHeaderText, oDp:nLbxClrHeaderPane}}
 
@@ -295,14 +273,121 @@ FUNCTION ViewData(aData,cTitle,cWhere_)
    oCEPPDECL:oBrw:bChange:={||oCEPPDECL:BRWCHANGE()}
    oCEPPDECL:oBrw:CreateFromCode()
 
+   aTotal:=ATOTALES(oDp:aCodTra)
 
-   oCEPPDECL:oWnd:oClient := oCEPPDECL:oBrw
+   oCEPPDECL:oBrwT:=TXBrowse():New( IF(oCEPPDECL:lTmdi,oCEPPDECL:oWnd,oCEPPDECL:oDlg ))
+   oCEPPDECL:oBrwT:SetArray( oDp:aCodTra, .F. )
+   oCEPPDECL:oBrwT:SetFont(oFont)
+
+   oCEPPDECL:oBrwT:lFooter     := .T.
+   oCEPPDECL:oBrwT:lHScroll    := .T.
+   oCEPPDECL:oBrwT:nHeaderLines:= 2
+   oCEPPDECL:oBrwT:nDataLines  := 1
+   oCEPPDECL:oBrwT:nFooterLines:= 1
+  
+   oCol:=oCEPPDECL:oBrwT:aCols[1]
+   oCol:cHeader      :='Código'
+   oCol:bLClickHeader:= {|r,c,f,o| SortArray( o, oCEPPDECL:oBrwT:aArrayData ) } 
+   oCol:nWidth       := 80
+   oCol:cFooter      :=FDP(LEN(oDp:aCodTra),oCol:cEditPicture)
+
+   oCol:=oCEPPDECL:oBrwT:aCols[2]
+   oCol:cHeader      :='Apellido y Nombre'
+   oCol:bLClickHeader:= {|r,c,f,o| SortArray( o, oCEPPDECL:oBrwT:aArrayData ) } 
+   oCol:nWidth       := 240
+
+   oCol:=oCEPPDECL:oBrwT:aCols[3]
+   oCol:cHeader      :='Desde'
+   oCol:bLClickHeader:= {|r,c,f,o| SortArray( o, oCEPPDECL:oBrwT:aArrayData ) } 
+   oCol:nWidth       := 70
+
+   oCol:=oCEPPDECL:oBrwT:aCols[4]
+   oCol:cHeader      :='Hasta'
+   oCol:bLClickHeader:= {|r,c,f,o| SortArray( o, oCEPPDECL:oBrwT:aArrayData ) } 
+   oCol:nWidth       := 70
+
+   oCol:=oCEPPDECL:oBrwT:aCols[5]
+   oCol:cHeader      :='Monto'+CRLF+"Asignación $"
+   oCol:bLClickHeader := {|r,c,f,o| SortArray( o, oCEPPDECL:oBrwT:aArrayData ) } 
+   oCol:nWidth       := 100
+   oCol:nDataStrAlign:= AL_RIGHT 
+   oCol:nHeadStrAlign:= AL_RIGHT 
+   oCol:nFootStrAlign:= AL_RIGHT 
+   oCol:cEditPicture :='999,999,999.99'
+   oCol:bStrData:={|nMonto,oCol|nMonto:= oCEPPDECL:oBrwT:aArrayData[oCEPPDECL:oBrwT:nArrayAt,5],;
+                                oCol   := oCEPPDECL:oBrwT:aCols[5],;
+                                FDP(nMonto,oCol:cEditPicture)}
+   oCol:cFooter      :=FDP(aTotal[5],oCol:cEditPicture)
+
+
+   // Campo: CUANTOS
+   oCol:=oCEPPDECL:oBrwT:aCols[6]
+   oCol:cHeader      :='Minimo'+CRLF+"CEPP"
+   oCol:bLClickHeader := {|r,c,f,o| SortArray( o, oCEPPDECL:oBrwT:aArrayData ) } 
+   oCol:nWidth       := 100
+   oCol:nDataStrAlign:= AL_RIGHT 
+   oCol:nHeadStrAlign:= AL_RIGHT 
+   oCol:nFootStrAlign:= AL_RIGHT 
+   oCol:cEditPicture :='999,999,999.99'
+   oCol:bStrData:={|nMonto,oCol|nMonto:= oCEPPDECL:oBrwT:aArrayData[oCEPPDECL:oBrwT:nArrayAt,6],;
+                                oCol   := oCEPPDECL:oBrwT:aCols[6],;
+                                FDP(nMonto,oCol:cEditPicture)}
+   oCol:cFooter      :=FDP(aTotal[6],oCol:cEditPicture)
+
+
+   oCol:=oCEPPDECL:oBrwT:aCols[7]
+   oCol:cHeader      :='Monto'+CRLF+"CEPP"
+   oCol:bLClickHeader := {|r,c,f,o| SortArray( o, oCEPPDECL:oBrwT:aArrayData ) } 
+   oCol:nWidth       := 100
+   oCol:nDataStrAlign:= AL_RIGHT 
+   oCol:nHeadStrAlign:= AL_RIGHT 
+   oCol:nFootStrAlign:= AL_RIGHT 
+   oCol:cEditPicture :='999,999,999.99'
+   oCol:bStrData:={|nMonto,oCol|nMonto:= oCEPPDECL:oBrwT:aArrayData[oCEPPDECL:oBrwT:nArrayAt,7],;
+                                oCol   := oCEPPDECL:oBrwT:aCols[7],;
+                                FDP(nMonto,oCol:cEditPicture)}
+   oCol:cFooter      :=FDP(aTotal[7],oCol:cEditPicture)
+
+   oCol:=oCEPPDECL:oBrwT:aCols[8]
+   oCol:cHeader      :='#'+CRLF+"Reg"
+   oCol:bLClickHeader:= {|r,c,f,o| SortArray( o, oCEPPDECL:oBrwT:aArrayData ) } 
+   oCol:nWidth       := 40
+   oCol:nDataStrAlign:= AL_RIGHT 
+   oCol:nHeadStrAlign:= AL_RIGHT 
+   oCol:nFootStrAlign:= AL_RIGHT 
+   oCol:cEditPicture :='999,999'
+   oCol:bStrData:={|nMonto,oCol|nMonto:= oCEPPDECL:oBrwT:aArrayData[oCEPPDECL:oBrwT:nArrayAt,8],;
+                                oCol   := oCEPPDECL:oBrwT:aCols[8],;
+                                FDP(nMonto,oCol:cEditPicture)}
+
+   oCol:cFooter      :=FDP(aTotal[8],oCol:cEditPicture)
+
+   oCEPPDECL:oBrwT:bClrStd  := {|nClrText,aLine|aLine:=oCEPPDECL:oBrwT:aArrayData[oCEPPDECL:oBrwT:nArrayAt],;
+                                                nClrText:=oCEPPDECL:nClrText,;
+                                                {nClrText,iif(oCEPPDECL:oBrwT:nArrayAt%2=0, oCEPPDECL:nClrPane1, oCEPPDECL:nClrPane2 ) } }
+
+   oCEPPDECL:oBrwT:bClrHeader          := {|| { oDp:nLbxClrHeaderText, oDp:nLbxClrHeaderPane}}
+   oCEPPDECL:oBrwT:bClrFooter          := {|| { oDp:nLbxClrHeaderText, oDp:nLbxClrHeaderPane}}
+
+   oCEPPDECL:oBrwT:CreateFromCode()
+
+   @ 0,0 SPLITTER oCEPPDECL:oHSplit ;
+         HORIZONTAL;
+         PREVIOUS CONTROLS oCEPPDECL:oBrw ;
+         HINDS CONTROLS oCEPPDECL:oBrwT;
+         TOP MARGIN 40 ;
+         BOTTOM MARGIN 40 ;
+         SIZE 300, 4  PIXEL ;
+         OF oCEPPDECL:oWnd ;
+         _3DLOOK
+
+   oCEPPDECL:oWnd:oClient := oCEPPDECL:oHSplit
 
    oCEPPDECL:Activate({||oCEPPDECL:ViewDatBar()})
 
    oCEPPDECL:oPeriodo:ForWhen(.T.)
 
-   oCEPPDECL:BRWRESTOREPAR()
+  // oCEPPDECL:BRWRESTOREPAR()
 
 RETURN .T.
 
@@ -314,13 +399,27 @@ FUNCTION ViewDatBar()
    LOCAL oDlg:=IF(oCEPPDECL:lTmdi,oCEPPDECL:oWnd,oCEPPDECL:oDlg)
    LOCAL nLin:=2,nCol:=0
    LOCAL nWidth:=oCEPPDECL:oBrw:nWidth()
+   LOCAL nAltoBrw:=150
 
    oCEPPDECL:oBrw:GoBottom(.T.)
    oCEPPDECL:oBrw:Refresh(.T.)
 
-   IF !File("FORMS\BRCEPPDECL.EDT")
-     oCEPPDECL:oBrw:Move(44,0,896+50,460)
-   ENDIF
+//   IF !File("FORMS\BRCEPPDECL.EDT")
+//     oCEPPDECL:oBrw:Move(44,0,896+50,460)
+//   ENDIF
+
+   /*   
+   //  Ubicamos el Area del Primer Objeto o Browse.
+   */
+
+   oCEPPDECL:oBrw:Move(032,0,800,nAltoBrw,.T.)
+
+   oCEPPDECL:oHSplit:Move(oCEPPDECL:oBrw:nHeight()+oCEPPDECL:oBrw:nTop(),0)
+   oCEPPDECL:oBrwT:Move(oCEPPDECL:oBrw:nHeight()+oCEPPDECL:oBrw:nTop()+5,0,800,400,.T.)
+
+   oCEPPDECL:oHSplit:AdjLeft()
+   oCEPPDECL:oHSplit:AdjRight()
+
 
    DEFINE CURSOR oCursor HAND
 
@@ -336,9 +435,6 @@ FUNCTION ViewDatBar()
    oCEPPDECL:nClrPaneBar:=oDp:nGris // MDI:GOTFOCUS()
    oCEPPDECL:oBrw:oLbx  :=oCEPPDECL    // MDI:GOTFOCUS()
 
-
-
-
  // Emanager no Incluye consulta de Vinculos
 
     DEFINE BUTTON oBtn;
@@ -349,8 +445,38 @@ FUNCTION ViewDatBar()
            TOP PROMPT "Guardar";
            ACTION oCEPPDECL:GRABAR_CEPP()
 
-    oBtn:cToolTip:="Incluir"
+    oBtn:cToolTip:="Grabar Registro de CxP "
 
+    DEFINE BUTTON oBtn;
+           OF oBar;
+           NOBORDER;
+           FONT oFont;
+           FILENAME "BITMAPS\XBROWSE.BMP";
+           TOP PROMPT "Detalles";
+           ACTION oCEPPDECL:VERDETALLES()
+
+    oBtn:cToolTip:="Ver Detalles"
+
+
+    DEFINE BUTTON oBtn;
+           OF oBar;
+           NOBORDER;
+           FONT oFont;
+           FILENAME "BITMAPS\CONFIGURA.BMP";
+           TOP PROMPT "Define";
+           ACTION EJECUTAR("BRCEPPXDEF","LEFT(HIS_CODCON,1)"+GetWhere("=","A"),oCEPPDECL:cCodSuc,oCEPPDECL:nPeriodo,oCEPPDECL:dDesde,oCEPPDECL:dHasta,NIL,oCEPPDECL)
+
+   oBtn:cToolTip:="Definiciones de Conceptos"
+
+   DEFINE BUTTON oBtn;
+       OF oBar;
+       NOBORDER;
+       FONT oFont;
+       FILENAME "BITMAPS\RECIBO.BMP";
+       TOP PROMPT "Recibos";
+       ACTION oCEPPDECL:VERRECIBO()
+
+       oBtn:cToolTip:="Ver todos los Recibos"
 
 
    IF oCEPPDECL:lBtnNew
@@ -379,12 +505,7 @@ FUNCTION ViewDatBar()
 
      oBtn:cToolTip:="Consultar Vinculos"
 
-
    ENDIF
-
-
-
-
 
 
 
@@ -819,7 +940,15 @@ RETURN .T.
 // Evento para presionar CLICK
 */
 FUNCTION RUNCLICK()
+  LOCAL aLine  :=oCEPPDECL:oBrw:aArrayData[oCEPPDECL:oBrw:nArrayAt]
+  LOCAL cCodigo:=aLine[1]
+  LOCAL cWhere :="LEFT(HIS_CODCON,1)"+GetWhere("=","A")
 
+  IF !Empty(cCodigo)
+     cWhere:=cWhere+" AND CYC_CODCLA"+GetWhere("=",cCodigo)
+  ENDIF
+
+  EJECUTAR("BRCEPPXDEF",cWhere,oCEPPDECL:cCodSuc,oCEPPDECL:nPeriodo,oCEPPDECL:dDesde,oCEPPDECL:dHasta,NIL,oCEPPDECL)
 
 RETURN .T.
 
@@ -909,10 +1038,15 @@ RETURN cWhere
 
 
 FUNCTION LEERDATA(cWhere,oBrw,cServer,oCEPPDECL)
-   LOCAL aData:={},aTotal:={},oCol,cSql,aLines:={}
+   LOCAL aData:={},aTotal:={},oCol,cSql,cSql1,aLines:={},nAt,aCodTra:={}
    LOCAL oDb,oTable
    LOCAL nAt,nRowSel
+   LOCAL nPorcen:=CNS(301)
+   LOCAL nMinimo:=CNS(302)
 
+   nPorcen:=IF(nPorcen=0,009,nPorcen)
+   nMinimo:=IF(nMinimo=0,300,nMinimo)
+ 
    DEFAULT cWhere:=""
 
    IF !Empty(cServer)
@@ -931,20 +1065,52 @@ FUNCTION LEERDATA(cWhere,oBrw,cServer,oCEPPDECL)
       cWhere:=SUBS(cWhere,6,LEN(cWhere))
    ENDIF
 
+
+   cSql1:=[ SELECT   ]+;
+          [ CODIGO, ]+;
+          [ TRA_NOMAPL, ]+;
+          [ MIN(FCH_DESDE) AS DESDE, ]+;
+          [ MAX(FCH_HASTA) AS HASTA, ]+;
+          [ SUM(HIS_MONTO/FCH_VALCAM) AS MONTO,  ]+;
+          [ ]+LSTR(nMinimo)+[ AS MONTOMIN, ]+;
+          [ SUM(HIS_MONTO*9/100) AS MONTOCEPP, ]+;
+          [ COUNT(*) AS CUANTOS  ]+;
+          [ FROM NMFECHAS   ]+;
+          [ INNER JOIN NMRECIBOS     ON REC_CODSUC=FCH_CODSUC AND REC_NUMFCH=FCH_NUMERO ]+;
+          [ INNER JOIN nmtrabajador  ON REC_CODTRA=CODIGO ]+;
+          [ INNER JOIN NMHISTORICO   ON REC_CODSUC=HIS_CODSUC AND REC_NUMERO=HIS_NUMREC ]+;
+          [ INNER JOIN NMCLAXCON     ON CYC_CODCON=HIS_CODCON AND LEFT(CYC_CODCLA,4)='CEPP' ]+;
+          [ INNER JOIN NMCLACON      ON CLA_CODIGO=CYC_CODCLA ]+;
+          [ WHERE LEFT(HIS_CODCON,1)='A' ]+;
+          [ GROUP BY CODIGO ]
+
+   IF !Empty(cWhere)
+     cSql1:=EJECUTAR("SQLINSERTWHERE",cSql1,cWhere)
+   ENDIF
+
+   oDp:aCodTra:=ASQL(cSql1)
+
+   IF EMPTY(oDp:aCodTra)
+      oDp:aCodTra:=EJECUTAR("SQLARRAYEMPTY",cSql1,oDb)
+   ENDIF
+
+   AEVAL(oDp:aCodTra,{|a,n| oDp:aCodTra[n,7]:=MAX(a[5],a[6]),;
+                            oDp:aCodTra[n,7]:=PORCEN(oDp:aCodTra[n,7],nPorcen)})
+
    cSql:=" SELECT   "+;
-          " CYC_CODCLA, "+;
-          " CLA_DESCRI, "+;
-          " SUM(HIS_MONTO), "+;
-          " SUM(HIS_MONTO*9/100) AS MONTOCEPP,"+;
-          " COUNT(*) AS CUANTOS "+;
-          " FROM NMFECHAS     "+;
-          " INNER JOIN NMRECIBOS     ON REC_CODSUC=FCH_CODSUC AND REC_NUMFCH=FCH_NUMERO     "+;
-          " INNER JOIN NMHISTORICO   ON REC_CODSUC=HIS_CODSUC AND REC_NUMERO=HIS_NUMREC     "+;
-          " INNER JOIN NMCLAXCON     ON CYC_CODCON=HIS_CODCON AND LEFT(CYC_CODCLA,4)='CEPP' "+;
-          " INNER JOIN NMCLACON      ON CLA_CODIGO=CYC_CODCLA "+;
-          " WHERE LEFT(HIS_CODCON,1)='A'  "+;
-          " GROUP BY CYC_CODCLA  "+;
-""
+         " CYC_CODCLA, "+;
+         " CLA_DESCRI, "+;
+         " SUM(HIS_MONTO), "+;
+         " SUM(HIS_MONTO*9/100) AS MONTOCEPP,"+;
+         " COUNT(*) AS CUANTOS "+;
+         " FROM NMFECHAS     "+;
+         " INNER JOIN NMRECIBOS     ON REC_CODSUC=FCH_CODSUC AND REC_NUMFCH=FCH_NUMERO     "+;
+         " INNER JOIN NMHISTORICO   ON REC_CODSUC=HIS_CODSUC AND REC_NUMERO=HIS_NUMREC     "+;
+         " INNER JOIN NMCLAXCON     ON CYC_CODCON=HIS_CODCON AND LEFT(CYC_CODCLA,4)='CEPP' "+;
+         " INNER JOIN NMCLACON      ON CLA_CODIGO=CYC_CODCLA "+;
+         " WHERE LEFT(HIS_CODCON,1)='A'  "+;
+         " GROUP BY CYC_CODCLA  "+;
+         ""
 
 /*
    IF Empty(cWhere)
@@ -973,13 +1139,16 @@ FUNCTION LEERDATA(cWhere,oBrw,cServer,oCEPPDECL)
 
    oDp:cWhere:=cWhere
 
+   nAt:=ASCAN(aData,{|a,n| ALLTRIM(a[1])="CEPP_NOAPLICA"})
+
+   IF nAt>0
+      aData[nAt,4]:=0
+   ENDIF            
 
    IF EMPTY(aData)
       aData:=EJECUTAR("SQLARRAYEMPTY",cSql,oDb)
 //    AADD(aData,{'','',0,0,0})
    ENDIF
-
-   
 
    IF ValType(oBrw)="O"
 
@@ -1140,6 +1309,15 @@ FUNCTION VERREGPLA()
 
 RETURN EJECUTAR("BRCALFISDET",cWhere,oDp:cSucursal,11,CTOD(""),CTOD(""),cTitle,lData)
 
+FUNCTION VERRECIBO()
+   LOCAL cWhere:=NIL,cTitle:=" [Rango "+DTOC(oCEPPDECL:dDesde)+" - "+DTOC(oCEPPDECL:dHasta)+"]"
+   EJECUTAR("BRRECIBOS",cWhere,oCEPPDECL:cCodSuc,oCEPPDECL:nPeriodo,oCEPPDECL:dDesde,oCEPPDECL:dHasta,cTitle)
+RETURN 
+
+FUNCTION VERDETALLES()
+  LOCAL cWhere:=NIL,cTitle:=NIL
+
+RETURN EJECUTAR("BRRESXCONCEPTOS",cWhere,oCEPPDECL:cCodSuc,oCEPPDECL:nPeriodo,oCEPPDECL:dDesde,oCEPPDECL:dHasta,cTitle)
 
 // EOF
 
