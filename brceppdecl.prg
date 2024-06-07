@@ -105,7 +105,12 @@ FUNCTION ViewData(aData,cTitle,cWhere_)
    LOCAL oFont,oFontB
    LOCAL aPeriodos:=ACLONE(oDp:aPeriodos)
    LOCAL aCoors:=GetCoors( GetDesktopWindow() )
+   LOCAL nPorcen:=CNS(301)
+   LOCAL nMinimo:=CNS(302)
 
+   nPorcen:=IF(nPorcen=0,009,nPorcen)
+   nMinimo:=IF(nMinimo=0,300,nMinimo)
+ 
    DEFINE FONT oFont  NAME "Tahoma"   SIZE 0, -12
    DEFINE FONT oFontB NAME "Tahoma"   SIZE 0, -12 BOLD
 
@@ -214,7 +219,7 @@ FUNCTION ViewData(aData,cTitle,cWhere_)
 
   // Campo: SUM(HIS_MONTO)
   oCol:=oCEPPDECL:oBrw:aCols[3]
-  oCol:cHeader      :='Monto'+CRLF+'Asignaciones'
+  oCol:cHeader      :='Monto $'+CRLF+'Asignaciones'
   oCol:bLClickHeader := {|r,c,f,o| SortArray( o, oCEPPDECL:oBrw:aArrayData ) } 
   oCol:nWidth       := 136
   oCol:nDataStrAlign:= AL_RIGHT 
@@ -229,7 +234,7 @@ FUNCTION ViewData(aData,cTitle,cWhere_)
 
   // Campo: MONTOCEPP
   oCol:=oCEPPDECL:oBrw:aCols[oCEPPDECL:COL_MONTOCEPP]
-  oCol:cHeader      :='Monto'+CRLF+'Pagar'
+  oCol:cHeader      :='Monto'+CRLF+LSTR(nPorcen)+"%"
   oCol:bLClickHeader := {|r,c,f,o| SortArray( o, oCEPPDECL:oBrw:aArrayData ) } 
   oCol:nWidth       := 120
   oCol:nDataStrAlign:= AL_RIGHT 
@@ -322,7 +327,7 @@ FUNCTION ViewData(aData,cTitle,cWhere_)
 
    // Campo: CUANTOS
    oCol:=oCEPPDECL:oBrwT:aCols[6]
-   oCol:cHeader      :='Minimo'+CRLF+"CEPP"
+   oCol:cHeader      :='Mínimo'+CRLF+"CEPP "+LSTR(nMinimo)+"$"
    oCol:bLClickHeader := {|r,c,f,o| SortArray( o, oCEPPDECL:oBrwT:aArrayData ) } 
    oCol:nWidth       := 100
    oCol:nDataStrAlign:= AL_RIGHT 
@@ -336,7 +341,7 @@ FUNCTION ViewData(aData,cTitle,cWhere_)
 
 
    oCol:=oCEPPDECL:oBrwT:aCols[7]
-   oCol:cHeader      :='Monto'+CRLF+"CEPP"
+   oCol:cHeader      :='Monto'+CRLF+"CEPP %"+LSTR(nPorcen)
    oCol:bLClickHeader := {|r,c,f,o| SortArray( o, oCEPPDECL:oBrwT:aArrayData ) } 
    oCol:nWidth       := 100
    oCol:nDataStrAlign:= AL_RIGHT 
@@ -1073,7 +1078,7 @@ FUNCTION LEERDATA(cWhere,oBrw,cServer,oCEPPDECL)
           [ MAX(FCH_HASTA) AS HASTA, ]+;
           [ SUM(HIS_MONTO/FCH_VALCAM) AS MONTO,  ]+;
           [ ]+LSTR(nMinimo)+[ AS MONTOMIN, ]+;
-          [ SUM(HIS_MONTO*9/100) AS MONTOCEPP, ]+;
+          [ SUM((HIS_MONTO/FCH_VALCAM)*]+LSTR(nPorcen)+[/100) AS MONTOCEPP, ]+;
           [ COUNT(*) AS CUANTOS  ]+;
           [ FROM NMFECHAS   ]+;
           [ INNER JOIN NMRECIBOS     ON REC_CODSUC=FCH_CODSUC AND REC_NUMFCH=FCH_NUMERO ]+;
@@ -1097,20 +1102,20 @@ FUNCTION LEERDATA(cWhere,oBrw,cServer,oCEPPDECL)
    AEVAL(oDp:aCodTra,{|a,n| oDp:aCodTra[n,7]:=MAX(a[5],a[6]),;
                             oDp:aCodTra[n,7]:=PORCEN(oDp:aCodTra[n,7],nPorcen)})
 
-   cSql:=" SELECT   "+;
-         " CYC_CODCLA, "+;
-         " CLA_DESCRI, "+;
-         " SUM(HIS_MONTO), "+;
-         " SUM(HIS_MONTO*9/100) AS MONTOCEPP,"+;
-         " COUNT(*) AS CUANTOS "+;
-         " FROM NMFECHAS     "+;
-         " INNER JOIN NMRECIBOS     ON REC_CODSUC=FCH_CODSUC AND REC_NUMFCH=FCH_NUMERO     "+;
-         " INNER JOIN NMHISTORICO   ON REC_CODSUC=HIS_CODSUC AND REC_NUMERO=HIS_NUMREC     "+;
-         " INNER JOIN NMCLAXCON     ON CYC_CODCON=HIS_CODCON AND LEFT(CYC_CODCLA,4)='CEPP' "+;
-         " INNER JOIN NMCLACON      ON CLA_CODIGO=CYC_CODCLA "+;
-         " WHERE LEFT(HIS_CODCON,1)='A'  "+;
-         " GROUP BY CYC_CODCLA  "+;
-         ""
+   cSql:=[ SELECT   ]+;
+         [ CYC_CODCLA, ]+;
+         [ CLA_DESCRI, ]+;
+         [ SUM(HIS_MONTO/FCH_VALCAM), ]+;
+         [ SUM((HIS_MONTO/FCH_VALCAM)*]+LSTR(nPorcen)+[/100) AS MONTOCEPP, ]+;
+         [ COUNT(*) AS CUANTOS ]+;
+         [ FROM NMFECHAS     ]+;
+         [ INNER JOIN NMRECIBOS     ON REC_CODSUC=FCH_CODSUC AND REC_NUMFCH=FCH_NUMERO     ]+;
+         [ INNER JOIN NMHISTORICO   ON REC_CODSUC=HIS_CODSUC AND REC_NUMERO=HIS_NUMREC     ]+;
+         [ INNER JOIN NMCLAXCON     ON CYC_CODCON=HIS_CODCON AND LEFT(CYC_CODCLA,4)='CEPP' ]+;
+         [ INNER JOIN NMCLACON      ON CLA_CODIGO=CYC_CODCLA ]+;
+         [ WHERE LEFT(HIS_CODCON,1)='A'  ]+;
+         [ GROUP BY CYC_CODCLA  ]
+         
 
 /*
    IF Empty(cWhere)
@@ -1172,6 +1177,21 @@ FUNCTION LEERDATA(cWhere,oBrw,cServer,oCEPPDECL)
       oBrw:nArrayAt  :=MIN(nAt,LEN(aData))
       oBrw:nRowSel   :=MIN(nRowSel,oBrw:nRowSel)
       AEVAL(oCEPPDECL:oBar:aControls,{|o,n| o:ForWhen(.T.)})
+
+
+      aTotal:=ATOTALES(oDp:aCodTra)
+
+      oCEPPDECL:oBrwT:aArrayData:=ACLONE(oDp:aCodTra)
+      oCEPPDECL:oBrwT:aData     :=NIL
+
+      EJECUTAR("BRWCALTOTALES",oCEPPDECL:oBrwT,.F.)
+
+      nAt    :=oCEPPDECL:oBrwT:nArrayAt
+      nRowSel:=oCEPPDECL:oBrwT:nRowSel
+
+      oCEPPDECL:oBrwT:Refresh(.F.)
+      oCEPPDECL:oBrwT:nArrayAt  :=MIN(nAt,LEN(aData))
+      oCEPPDECL:oBrwT:nRowSel   :=MIN(nRowSel,oBrw:nRowSel)
 
       oCEPPDECL:SAVEPERIODO()
 
@@ -1315,7 +1335,30 @@ FUNCTION VERRECIBO()
 RETURN 
 
 FUNCTION VERDETALLES()
-  LOCAL cWhere:=NIL,cTitle:=NIL
+  LOCAL cWhere :=NIL,cTitle:=NIL,cSql
+  LOCAL cWhereD:=oCEPPDECL:HACERWHERE(oCEPPDECL:dDesde,oCEPPDECL:dHasta,oCEPPDECL:cWhere,.T.)
+  LOCAL aCodCon:={}
+
+  cSql:=[ SELECT ]+;
+        [ HIS_CODCON ]+;
+        [ FROM NMFECHAS     ]+;
+        [ INNER JOIN NMRECIBOS     ON REC_CODSUC=FCH_CODSUC AND REC_NUMFCH=FCH_NUMERO     ]+;
+        [ INNER JOIN NMHISTORICO   ON REC_CODSUC=HIS_CODSUC AND REC_NUMERO=HIS_NUMREC     ]+;
+        [ INNER JOIN NMCLAXCON     ON CYC_CODCON=HIS_CODCON AND LEFT(CYC_CODCLA,4)='CEPP' ]+;
+        [ INNER JOIN NMCLACON      ON CLA_CODIGO=CYC_CODCLA ]+;
+        [ WHERE LEFT(HIS_CODCON,1)='A'  ]+;
+        [ GROUP BY HIS_CODCON ]
+         
+   IF !Empty(cWhereD)
+      cSql:=EJECUTAR("SQLINSERTWHERE",cSql,cWhereD)
+   ENDIF
+
+   aCodCon:=ASQL(cSql)
+   AEVAL(aCodCon,{|a,n| aCodCon[n]:=a[1]})
+
+   IF !Empty(aCodCon)
+      cWhere:=GetWhereOr("HIS_CODCON",aCodCon)
+   ENDIF
 
 RETURN EJECUTAR("BRRESXCONCEPTOS",cWhere,oCEPPDECL:cCodSuc,oCEPPDECL:nPeriodo,oCEPPDECL:dDesde,oCEPPDECL:dHasta,cTitle)
 
