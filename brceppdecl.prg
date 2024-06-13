@@ -13,7 +13,8 @@ PROCE MAIN(cWhere,cCodSuc,nPeriodo,dDesde,dHasta,cTitle,cNumReg,lFecha)
    LOCAL V_dDesde:=CTOD(""),V_dHasta:=CTOD("")
    LOCAL cServer:=oDp:cRunServer
    LOCAL lConectar:=.F.
-   LOCAL aFields  :={},cTipDoc:="CEP",dFecha:=NIL
+   LOCAL aFields  :={},cTipDoc:="CEP",dFecha:=NIL,cWhereF:=NIL
+   LOCAL lRunDef  :=.F.
 
    oDp:cRunServer:=NIL
 
@@ -33,8 +34,11 @@ PROCE MAIN(cWhere,cCodSuc,nPeriodo,dDesde,dHasta,cTitle,cNumReg,lFecha)
 
    ENDIF
 
+   EJECUTAR("DPEMPGETRIF")
 
-   cTitle:="Cálculo de Contribución Especial Pensiones" +IF(Empty(cTitle),"",cTitle)
+   oDp:cRif:=ALLTRIM(oDp:cRif)
+
+   cTitle  :="Cálculo de Contribución Especial Pensiones [RIF="+RIGHT(oDp:cRif,1)+"]" +IF(Empty(cTitle),"",cTitle)
 
    oDp:oFrm:=NIL
 
@@ -68,6 +72,11 @@ PROCE MAIN(cWhere,cCodSuc,nPeriodo,dDesde,dHasta,cTitle,cNumReg,lFecha)
        dDesde :=aFechas[1]
        dHasta :=aFechas[2]
 
+       IF !Empty(dDesde)
+         dHasta :=FCHFINMES(dDesde-1)
+         dDesde :=FCHINIMES(dHasta) 
+       ENDIF
+
    ENDIF
 
    DEFAULT cNumReg:=EJECUTAR("GETNUMPLAFISCAL",oDp:cSucursal,cTipDoc,dHasta+1),;
@@ -88,19 +97,32 @@ PROCE MAIN(cWhere,cCodSuc,nPeriodo,dDesde,dHasta,cTitle,cNumReg,lFecha)
    aData  :=LEERDATA(HACERWHERE(dDesde,dHasta,cWhere),NIL,cServer,NIL)
    aFields:=ACLONE(oDp:aFields) // genera los campos Virtuales
 
+
+   IF !Empty(aData) .AND. Empty(aData[1,1])
+
+      cWhereF:=[ INNER JOIN NMRECIBOS     ON REC_CODSUC=FCH_CODSUC AND REC_NUMFCH=FCH_NUMERO ]+;
+               [ INNER JOIN NMHISTORICO   ON REC_CODSUC=HIS_CODSUC AND REC_NUMERO=HIS_NUMREC ]+;
+               [ WHERE LEFT(HIS_CODCON,1)='A' AND ]+GetWhereAnd("FCH_HASTA",dDesde,dHasta) 
+
+      IF ISSQLFIND("NMFECHAS",cWhereF)
+         lRunDef:=.T.
+      ENDIF
+
+   ENDIF
+
    IF Empty(aData)
       MensajeErr("no hay "+cTitle,"Información no Encontrada")
       RETURN .F.
    ENDIF
 
-   ViewData(aData,cTitle,oDp:cWhere)
+   ViewData(aData,cTitle,oDp:cWhere,aFields)
 
    oDp:oFrm:=oCEPPDECL
 
 RETURN .T.
 
 
-FUNCTION ViewData(aData,cTitle,cWhere_)
+FUNCTION ViewData(aData,cTitle,cWhere_,aFields)
    LOCAL oBrw,oCol,aTotal:=ATOTALES(aData)
    LOCAL oFont,oFontB
    LOCAL aPeriodos:=ACLONE(oDp:aPeriodos)
@@ -147,12 +169,16 @@ FUNCTION ViewData(aData,cTitle,cWhere_)
    oCEPPDECL:cNumReg  :=cNumReg
    oCEPPDECL:lFecha   :=lFecha
    oCEPPDECL:dFecha   :=dFecha
+   oCEPPDECL:nValCam  :=EJECUTAR("DPGETVALCAM")
+   oCEPPDECL:nMtoCEP  :=0
+
+
 
    oCEPPDECL:nClrPane1:=oDp:nClrPane1
    oCEPPDECL:nClrPane2:=oDp:nClrPane2
 
    oCEPPDECL:nClrText1:=0
-   oCEPPDECL:nClrText2:=0
+   oCEPPDECL:nClrText2:=9061632
    oCEPPDECL:nClrText3:=0
    oCEPPDECL:nClrText4:=0
    oCEPPDECL:nClrText5:=0
@@ -187,7 +213,7 @@ FUNCTION ViewData(aData,cTitle,cWhere_)
 
    oCEPPDECL:nClrText :=0
    oCEPPDECL:nClrText1:=0
-   oCEPPDECL:nClrText2:=0
+   oCEPPDECL:nClrText2:=11556864
    oCEPPDECL:nClrText3:=0
 
    oCEPPDECL:oBrw:=TXBrowse():New( IF(oCEPPDECL:lTmdi,oCEPPDECL:oWnd,oCEPPDECL:oDlg ))
@@ -341,7 +367,7 @@ FUNCTION ViewData(aData,cTitle,cWhere_)
 
 
    oCol:=oCEPPDECL:oBrwT:aCols[7]
-   oCol:cHeader      :='Monto'+CRLF+"CEPP %"+LSTR(nPorcen)
+   oCol:cHeader      :='Monto'+CRLF+"CEPP " // +LSTR(nPorcen)
    oCol:bLClickHeader := {|r,c,f,o| SortArray( o, oCEPPDECL:oBrwT:aArrayData ) } 
    oCol:nWidth       := 100
    oCol:nDataStrAlign:= AL_RIGHT 
@@ -361,20 +387,25 @@ FUNCTION ViewData(aData,cTitle,cWhere_)
    oCol:nHeadStrAlign:= AL_RIGHT 
    oCol:nFootStrAlign:= AL_RIGHT 
    oCol:cEditPicture :='999,999'
-   oCol:bStrData:={|nMonto,oCol|nMonto:= oCEPPDECL:oBrwT:aArrayData[oCEPPDECL:oBrwT:nArrayAt,8],;
+   oCol:bStrData:={|nMonto,oCol|nMonto := oCEPPDECL:oBrwT:aArrayData[oCEPPDECL:oBrwT:nArrayAt,8],;
                                 oCol   := oCEPPDECL:oBrwT:aCols[8],;
                                 FDP(nMonto,oCol:cEditPicture)}
 
    oCol:cFooter      :=FDP(aTotal[8],oCol:cEditPicture)
 
-   oCEPPDECL:oBrwT:bClrStd  := {|nClrText,aLine|aLine:=oCEPPDECL:oBrwT:aArrayData[oCEPPDECL:oBrwT:nArrayAt],;
-                                                nClrText:=oCEPPDECL:nClrText,;
+   oCEPPDECL:oBrwT:bClrStd  := {|nClrText,aLine|aLine    :=oCEPPDECL:oBrwT:aArrayData[oCEPPDECL:oBrwT:nArrayAt],;
+                                                nClrText :=oCEPPDECL:nClrText,;
+                                                nClrText2:=if(aLine[5]>aLine[6],oCEPPDECL:nClrText2,nClrText),;
                                                 {nClrText,iif(oCEPPDECL:oBrwT:nArrayAt%2=0, oCEPPDECL:nClrPane1, oCEPPDECL:nClrPane2 ) } }
 
    oCEPPDECL:oBrwT:bClrHeader          := {|| { oDp:nLbxClrHeaderText, oDp:nLbxClrHeaderPane}}
    oCEPPDECL:oBrwT:bClrFooter          := {|| { oDp:nLbxClrHeaderText, oDp:nLbxClrHeaderPane}}
 
    oCEPPDECL:oBrwT:CreateFromCode()
+
+   oCEPPDECL:oBrwT:bLDblClick:={|oBrw|oCEPPDECL:RUNCLICKT() }
+
+   oCEPPDECL:aTotalT:=ACLONE(aTotal)
 
    @ 0,0 SPLITTER oCEPPDECL:oHSplit ;
          HORIZONTAL;
@@ -391,6 +422,10 @@ FUNCTION ViewData(aData,cTitle,cWhere_)
    oCEPPDECL:Activate({||oCEPPDECL:ViewDatBar()})
 
    oCEPPDECL:oPeriodo:ForWhen(.T.)
+
+   IF lRunDef
+      EJECUTAR("BRCEPPXDEF",NIL,oDp:cSucursal,oCEPPDECL:nPeriodo,oCEPPDECL:dDesde,oCEPPDECL:dHasta,NIL,oCEPPDECL)
+   ENDIF
 
   // oCEPPDECL:BRWRESTOREPAR()
 
@@ -531,15 +566,9 @@ FUNCTION ViewDatBar()
        oBtn:cToolTip:="Ejecutar Browse Vinculado(s)"
        oCEPPDECL:oBtnRun:=oBtn
 
-
-
        oCEPPDECL:oBrw:bLDblClick:={||EVAL(oCEPPDECL:oBtnRun:bAction) }
 
-
    ENDIF
-
-
-
 
 IF oCEPPDECL:lBtnRun
 
@@ -842,7 +871,7 @@ ENDIF
 
   oCEPPDECL:oBar:=oBar
 
-  oBar:SetSize(0,100,.T.)
+  oBar:SetSize(0,100+30,.T.)
 
   nCol:=15
   nLin:=70
@@ -868,7 +897,7 @@ ENDIF
                  OF oBar;
                  ACTION (EJECUTAR("PERIODOMAS",oCEPPDECL:oPeriodo:nAt,oCEPPDECL:oDesde,oCEPPDECL:oHasta,-1),;
                          EVAL(oCEPPDECL:oBtn:bAction));
-                WHEN oCEPPDECL:lWhen
+                 WHEN oCEPPDECL:lWhen
 
 
   @ nLin, nCol+130 BUTTON oCEPPDECL:oBtn PROMPT " > " SIZE 27,24;
@@ -877,7 +906,7 @@ ENDIF
                  OF oBar;
                  ACTION (EJECUTAR("PERIODOMAS",oCEPPDECL:oPeriodo:nAt,oCEPPDECL:oDesde,oCEPPDECL:oHasta,+1),;
                          EVAL(oCEPPDECL:oBtn:bAction));
-                WHEN oCEPPDECL:lWhen
+                 WHEN oCEPPDECL:lWhen
 
 
   @ nLin, nCol+160 BMPGET oCEPPDECL:oDesde  VAR oCEPPDECL:dDesde;
@@ -928,16 +957,41 @@ IF !Empty(oCEPPDECL:cNumReg)
      SayAction(oCEPPDECL:oNumReg,{||oCEPPDECL:VERREGPLA()})
   ENDIF
 
-  @ nLin,nCol+620 SAYREF oCEPPDECL:oFecha PROMPT " Fecha Pago "+DTOC(oCEPPDECL:dFecha)+" " OF oBar;
-                  SIZE 190,20 ;
-                  PIXEL COLOR oDp:nClrYellowText,oDp:nClrYellow FONT oFont 
+  @ 100,350nCol+620 SAYREF oCEPPDECL:oFecha PROMPT " Fecha Pago "+DTOC(oCEPPDECL:dFecha)+" " OF oBar;
+                    SIZE 190,20 ;
+                    PIXEL COLOR oDp:nClrYellowText,oDp:nClrYellow FONT oFont PIXEL
 
   SayAction(oCEPPDECL:oFecha,{||oCEPPDECL:VERREGPLA()})
 
 ENDIF
 
-//  @ nLin, nCol+500 SAY oCEPPDECL:cNumReg OF oBar FONT oFont BORDER PIXEL
+ oCEPPDECL:nMtoCEP:=ROUND(oCEPPDECL:aTotalT[7]*oCEPPDECL:nValCam,2)
 
+ oCEPPDECL:oBrwT:SetColor(0,oCEPPDECL:nClrPane1)
+
+ DEFINE FONT oFont  NAME "Tahoma"   SIZE 0, -12 BOLD
+
+ @ 100,15 SAY "Divisa " OF oBar PIXEL RIGHT BORDER SIZE 60,20 FONT oFont;
+          COLOR oDp:nClrLabelText,oDp:nClrLabelPane
+
+ @ 100,076 GET oCEPPDECL:oValCam VAR oCEPPDECL:nValCam OF oBar ;
+               PIXEL RIGHT;
+               SIZE 120,20 FONT oFont PICTURE oDp:cPictureDivisa;
+              
+  oCEPPDECL:oValCam:bKeyDown:={|nKey| IF(nKey=13,oCEPPDECL:VALCEPP(),NIL) }
+
+ @ 100,200 SAY "Monto CEPP " OF oBar PIXEL RIGHT BORDER SIZE 90,20 FONT oFont;
+           COLOR oDp:nClrLabelText,oDp:nClrLabelPane
+
+ @ 100,226+65 GET oCEPPDECL:oMtoCEP VAR oCEPPDECL:nMtoCEP PICTURE "999,999,999,999.99" OF oBar RIGHT;
+           SIZE 120,20 FONT oFont PIXEL
+
+RETURN .T.
+
+FUNCTION VALCEPP()
+
+  oCEPPDECL:nMtoCEP:=ROUND(oCEPPDECL:aTotalT[7]*oCEPPDECL:nValCam,2)
+  oCEPPDECL:oMtoCEP:VarPut(oCEPPDECL:nMtoCEP,.T.)
 
 RETURN .T.
 
@@ -1048,6 +1102,7 @@ FUNCTION LEERDATA(cWhere,oBrw,cServer,oCEPPDECL)
    LOCAL nAt,nRowSel
    LOCAL nPorcen:=CNS(301)
    LOCAL nMinimo:=CNS(302)
+   LOCAL cWhereF:=NIL,dDesde,dHasta
 
    nPorcen:=IF(nPorcen=0,009,nPorcen)
    nMinimo:=IF(nMinimo=0,300,nMinimo)
@@ -1071,7 +1126,7 @@ FUNCTION LEERDATA(cWhere,oBrw,cServer,oCEPPDECL)
    ENDIF
 
 
-   cSql1:=[ SELECT   ]+;
+   cSql1:=[ SELECT ]+;
           [ CODIGO, ]+;
           [ TRA_NOMAPL, ]+;
           [ MIN(FCH_DESDE) AS DESDE, ]+;
@@ -1084,7 +1139,7 @@ FUNCTION LEERDATA(cWhere,oBrw,cServer,oCEPPDECL)
           [ INNER JOIN NMRECIBOS     ON REC_CODSUC=FCH_CODSUC AND REC_NUMFCH=FCH_NUMERO ]+;
           [ INNER JOIN nmtrabajador  ON REC_CODTRA=CODIGO ]+;
           [ INNER JOIN NMHISTORICO   ON REC_CODSUC=HIS_CODSUC AND REC_NUMERO=HIS_NUMREC ]+;
-          [ INNER JOIN NMCLAXCON     ON CYC_CODCON=HIS_CODCON AND LEFT(CYC_CODCLA,4)='CEPP' ]+;
+          [ INNER JOIN NMCLAXCON     ON CYC_CODCON=HIS_CODCON AND LEFT(CYC_CODCLA,4)='CEPP' AND CYC_CODCLA<>'CEPP_NOAPLICA' ]+;
           [ INNER JOIN NMCLACON      ON CLA_CODIGO=CYC_CODCLA ]+;
           [ WHERE LEFT(HIS_CODCON,1)='A' ]+;
           [ GROUP BY CODIGO ]
@@ -1129,7 +1184,6 @@ FUNCTION LEERDATA(cWhere,oBrw,cServer,oCEPPDECL)
    ENDIF
 
    cSql:=EJECUTAR("WHERE_VAR",cSql)
-
 
    oDp:lExcluye:=.F.
 
@@ -1178,7 +1232,6 @@ FUNCTION LEERDATA(cWhere,oBrw,cServer,oCEPPDECL)
       oBrw:nRowSel   :=MIN(nRowSel,oBrw:nRowSel)
       AEVAL(oCEPPDECL:oBar:aControls,{|o,n| o:ForWhen(.T.)})
 
-
       aTotal:=ATOTALES(oDp:aCodTra)
 
       oCEPPDECL:oBrwT:aArrayData:=ACLONE(oDp:aCodTra)
@@ -1193,7 +1246,21 @@ FUNCTION LEERDATA(cWhere,oBrw,cServer,oCEPPDECL)
       oCEPPDECL:oBrwT:nArrayAt  :=MIN(nAt,LEN(aData))
       oCEPPDECL:oBrwT:nRowSel   :=MIN(nRowSel,oBrw:nRowSel)
 
+      oCEPPDECL:aTotalT:=ACLONE(aTotal)
+      oCEPPDECL:VALCEPP()
+
       oCEPPDECL:SAVEPERIODO()
+
+      dDesde :=oCEPPDECL:dDesde
+      dHasta :=oCEPPDECL:dHasta
+
+      cWhereF:=[ INNER JOIN NMRECIBOS     ON REC_CODSUC=FCH_CODSUC AND REC_NUMFCH=FCH_NUMERO ]+;
+               [ INNER JOIN NMHISTORICO   ON REC_CODSUC=HIS_CODSUC AND REC_NUMERO=HIS_NUMREC ]+;
+               [ WHERE LEFT(HIS_CODCON,1)='A' AND ]+GetWhereAnd("FCH_HASTA",dDesde,dHasta) 
+   
+      IF Empty(aData[1,1]) .AND. ISSQLFIND("NMFECHAS",cWhereF)
+         EJECUTAR("BRCEPPXDEF",NIL,oDp:cSucursal,oCEPPDECL:nPeriodo,dDesde,dHasta,NIL,NIL)
+      ENDIF
 
    ENDIF
 
@@ -1304,10 +1371,11 @@ RETURN .T.
 
 FUNCTION GRABAR_CEPP()
     LOCAL aTotal:=ATOTALES(oCEPPDECL:oBrw:aArrayData)
-    LOCAL nTotal:=aTotal[4]
+    LOCAL nTotal:=oCEPPDECL:nMtoCEP 
     LOCAL cCodigo:=EJECUTAR("GETCODSENIAT")
+    LOCAL cDescri:=ALLTRIM(SQLGET("DPTIPDOCPRO","TDC_DESCRI","TDC_TIPO"+GetWhere("=","CEP")))
 
-    IF !MsgNoYes("Desea Registrar Documento por Pagar"+CRLF+"Monto "+ALLTRIM(FDP(nTotal,"99,999,999,999.99")))
+    IF !MsgNoYes("Desea Registrar Documento por Pagar"+CRLF+cDescri+CRLF+"Monto "+ALLTRIM(FDP(nTotal,"99,999,999,999.99")))
        RETURN .T.
     ENDIF
 
@@ -1335,9 +1403,11 @@ FUNCTION VERRECIBO()
 RETURN 
 
 FUNCTION VERDETALLES()
-  LOCAL cWhere :=NIL,cTitle:=NIL,cSql
+  LOCAL cWhere :="",cTitle:=NIL,cSql
   LOCAL cWhereD:=oCEPPDECL:HACERWHERE(oCEPPDECL:dDesde,oCEPPDECL:dHasta,oCEPPDECL:cWhere,.T.)
   LOCAL aCodCon:={}
+  LOCAL aLine  :=oCEPPDECL:oBrw:aArrayData[oCEPPDECL:oBrw:nArrayAt]
+
 
   cSql:=[ SELECT ]+;
         [ HIS_CODCON ]+;
@@ -1360,7 +1430,14 @@ FUNCTION VERDETALLES()
       cWhere:=GetWhereOr("HIS_CODCON",aCodCon)
    ENDIF
 
+   cWhere:=cWhere+IF(Empty(cWhere),""," AND ")+" CYC_CODCLA "+GetWhere("=",aLine[1])
+   cTitle:=" Clasificación "+aLine[1]
+
 RETURN EJECUTAR("BRRESXCONCEPTOS",cWhere,oCEPPDECL:cCodSuc,oCEPPDECL:nPeriodo,oCEPPDECL:dDesde,oCEPPDECL:dHasta,cTitle)
 
+FUNCTION RUNCLICKT()
+  LOCAL aLine  :=oCEPPDECL:oBrwT:aArrayData[oCEPPDECL:oBrwT:nArrayAt]
+  LOCAL cCodTra:=aLine[1],cWhere:=NIL,cTitle:=NIL
+EJECUTAR("BRCEPPRECXTRAB",cWhere,oCEPPDECL:cCodSuc,oCEPPDECL:nPeriodo,oCEPPDECL:dDesde,oCEPPDECL:dHasta,cTitle,cCodTra)
 // EOF
 

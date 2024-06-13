@@ -8,7 +8,7 @@
 
 #INCLUDE "DPXBASE.CH"
 
-PROCE MAIN(cWhere,cCodSuc,nPeriodo,dDesde,dHasta,cTitle)
+PROCE MAIN(cWhere,cCodSuc,nPeriodo,dDesde,dHasta,cTitle,oFrmLink)
    LOCAL aData,aFechas,cFileMem:="USER\BRCEPPXDEF.MEM",V_nPeriodo:=1,cCodPar
    LOCAL V_dDesde:=CTOD(""),V_dHasta:=CTOD("")
    LOCAL cServer:=oDp:cRunServer
@@ -21,6 +21,7 @@ PROCE MAIN(cWhere,cCodSuc,nPeriodo,dDesde,dHasta,cTitle)
       RETURN EJECUTAR("BRRUNNEW",oCEPPXDEF,GetScript())
    ENDIF
 
+   DEFAULT cWhere:=[ LEFT(HIS_CODCON,1)='A' AND CYC_CODCLA IS NULL ]
 
    IF !Empty(cServer)
 
@@ -141,8 +142,10 @@ FUNCTION ViewData(aData,cTitle,cWhere_)
    oCEPPXDEF:lTmdi    :=.T.
    oCEPPXDEF:aHead    :={}
    oCEPPXDEF:lBarDef  :=.T. // Activar Modo Diseño.
+   oCEPPXDEF:oFrmLink :=oFrmLink
    oCEPPXDEF:aFields  :=ACLONE(aFields)
    oCEPPXDEF:aPropB   :=ATABLE([SELECT CLA_CODIGO FROM NMCLACON WHERE LEFT(CLA_CODIGO,4)='CEPP' ORDER BY CLA_CODIGO ])
+   oCEPPXDEF:cOnClose :="ONCLOSE"
 
    oCEPPXDEF:nClrPane1:=oDp:nClrPane1
    oCEPPXDEF:nClrPane2:=oDp:nClrPane2
@@ -861,9 +864,11 @@ FUNCTION LEERDATA(cWhere,oBrw,cServer,oCEPPXDEF)
           " INNER JOIN NMHISTORICO       ON REC_CODSUC=HIS_CODSUC AND REC_NUMERO=HIS_NUMREC    "+;
           " INNER JOIN NMCONCEPTOS       ON HIS_CODCON=CON_CODIGO"+;
           " LEFT JOIN NMCLAXCON          ON CYC_CODCON=HIS_CODCON AND LEFT(CYC_CODCLA,4)='CEPP'"+;
-          " WHERE LEFT(HIS_CODCON,1)='A' AND CYC_CODCLA IS NULL"+;
-          "  GROUP BY HIS_CODCON,CYC_CODCLA"+;
-""
+          " WHERE 1=1 "+;
+          " GROUP BY HIS_CODCON,CYC_CODCLA"+;
+          ""
+
+// LEFT(HIS_CODCON,1)='A' AND CYC_CODCLA IS NULL"+;
 
 /*
    IF Empty(cWhere)
@@ -1038,9 +1043,11 @@ FUNCTION GRABARCLASIFICA(oCol,cCodCla,nCol)
 
   DEFAULT nCol:=3
 
+  SQLDELETE("NMCLAXCON","CYC_CODCON"+GetWhere("=",cCodCon)+" AND CYC_CODCLA"+GetWhere("=",aLine[3]))
+
   oTable:=OpenTable("SELECT * FROM NMCLAXCON WHERE"+;
-                     " CYC_CODCON"+GetWhere("=",cCodCon)+" AND "+;
-                     " CYC_CODCLA"+GetWhere("=",cCodCla),.T.)
+                    " CYC_CODCON"+GetWhere("=",cCodCon)+" AND "+;
+                    " CYC_CODCLA"+GetWhere("=",cCodCla),.T.)
   oTable:lAuditar:=.F.
 
   IF lSelect .AND. oTable:RecCount()>0
@@ -1070,6 +1077,14 @@ FUNCTION GRABARCLASIFICA(oCol,cCodCla,nCol)
 
   oCEPPXDEF:oBrw:aArrayData[oCEPPXDEF:oBrw:nArrayAt,nCol]:=cCodCla
   oCEPPXDEF:oBrw:DrawLine(.T.)
+
+RETURN .T.
+
+FUNCTION ONCLOSE()
+
+  IF ValType(oCEPPXDEF:oFrmLink)="O"
+     oCEPPXDEF:oFrmLink:BRWREFRESCAR()
+  ENDIF
 
 RETURN .T.
 
