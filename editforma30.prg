@@ -18,13 +18,14 @@ PROCE MAIN(dFecha,cCodSuc,cNumReg,nAno,nMes,lFecha,dDesde,dHasta,lFrm,lSemana)
   LOCAL nWidth :=0 // Ancho Calculado seg£n Columnas
   LOCAL nHeight:=0 // Alto
   LOCAL nLines :=0 // Lineas
+  LOCAL lEdit  :=.F. 
 
   DEFAULT dFecha :=FCHINIMES(oDp:dFecha)-1,;
           cCodSuc:=oDp:cSucMain ,;
           nAno   :=IF(ValType(dFecha)="A",YEAR(dFecha[1]),YEAR(dFecha)) ,;
           nMes   :=MONTH(dFecha),;
           lFecha :=.F.          ,;
-          cNumReg:="",;
+          cNumReg:=NIL,;
           dDesde :=CTOD(""),;
           dHasta :=CTOD(""),;
           lSemana:=.T.
@@ -60,7 +61,8 @@ PROCE MAIN(dFecha,cCodSuc,cNumReg,nAno,nMes,lFecha,dDesde,dHasta,lFrm,lSemana)
      RETURN .F.
   ENDIF
 
-  cPplReg:=cNumReg // 05/05/2020
+//  cPplReg:=cNumReg // 05/05/2020
+// ? cPplReg,"cPplReg",ValType(cPplReg)
 
 /*
   IF ValType(dFecha)="A"
@@ -107,17 +109,53 @@ PROCE MAIN(dFecha,cCodSuc,cNumReg,nAno,nMes,lFecha,dDesde,dHasta,lFrm,lSemana)
 
 */
 
-
   dDesde:=IF(Empty(dDesde),dFecha,dDesde)
   dHasta:=IF(Empty(dHasta),dFecha,dHasta)
 
+  IF Empty(cPplReg) .AND. ValType(cPplReg)="C"
+
+    lEdit :=.T.
+    dFecha:=oDp:dFecha
+
+    IF !oDp:lConEsp
+
+      dHasta:=FCHINIMES(dFecha)-1
+      dDesde:=FCHINIMES(dDesde)
+
+    ELSE
+
+      IF DAY(dFecha)<15
+
+        nPeriodo:=2
+        dHasta:=FCHINIMES(dFecha)-1
+        dDesde:=CTOD("16/"+LSTR(MONTH(dHasta))+"/"+LSTR(YEAR(dHasta)))
+
+      ELSE
+
+        nPeriodo:=1
+        dDesde:=FCHINIMES(dFecha)
+        dHasta:=CTOD("15/"+LSTR(MONTH(dDesde))+"/"+LSTR(YEAR(dDesde)))
+
+      ENDIF
+
+      IF LEFT(oDp:cTipCon,1)="F"
+
+       cWhere:="F30_FECHA"+GetWhere("<=",dFecha)+" ORDER BY F30_FECHA DESC "
+       dHasta:=SQLGET("VIEW_DPCALF30","F30_FCHDEC,F30_FECHA",cWhere)
+       dDesde:=DPSQLROW(2)
+       dFecha:=dHasta
+
+      ENDIF
+
+    ENDIF
+
+  ENDIF
 
   PUBLICO("lTodas",.F.)
 
   oData:=DATASET("CONFIG","ALL")
 
   DPEDIT():New("Autoliquidación de IVA [Forma30]","forms\DPFORMA30.EDT","oLiq30",.T.)
-
 
   // FORMAL
   IF LEFT(oDp:cTipCon,1)="F"
@@ -184,10 +222,16 @@ PROCE MAIN(dFecha,cCodSuc,cNumReg,nAno,nMes,lFecha,dDesde,dHasta,lFrm,lSemana)
   oLiq30:cAudita :="Forma 30"
   oLiq30:cTable  :=""
   oLiq30:cMemoTxt:=""
-  oLiq30:cPplReg :=cNumReg // Registro de Planificacion
+  oLiq30:cPplReg :=cPplReg //  cNumReg // Registro de Planificacion
   oLiq30:cNumReg :=cNumReg
   oLiq30:lFecha  :=lFecha
   oLiq30:lSemana :=lSemana
+  oLiq30:lEdit   :=lEdit
+
+
+  oLiq30:oDesde  :=NIL
+  oLiq30:oHasta  :=NIL
+
   oLiq30:dDesde  :=dDesde
   oLiq30:dHasta  :=dHasta
   oLiq30:dFecha  :=dFecha
@@ -200,7 +244,8 @@ PROCE MAIN(dFecha,cCodSuc,cNumReg,nAno,nMes,lFecha,dDesde,dHasta,lFrm,lSemana)
 
   oLiq30:SetScript("EDITFORMA30")
 
-  IF Empty(oLiq30:cNumReg)
+  IF cPplReg=NIL
+    // oLiq30:cNumReg=NIL
     oLiq30:VALPLANIFICA(.F.)
   ENDIF
  
@@ -219,12 +264,13 @@ PROCE MAIN(dFecha,cCodSuc,cNumReg,nAno,nMes,lFecha,dDesde,dHasta,lFrm,lSemana)
 
   @ 0.5,3 GET oLiq30:oAno VAR oLiq30:nAno PICTURE "9999" SPINNER;
               VALID  oLiq30:DESDEHASTA();
-              WHEN Empty(oLiq30:cPplReg) 
+              WHEN Empty(oLiq30:cPplReg) .AND. !oDp:lConEsp
+
 
 // .AND. !oLiq30:lSemana) .OR. LEFT(oDp:cTipCon,1)="O"
 
   @ 2.0,3 COMBOBOX oLiq30:oMes VAR oLiq30:nMes ITEMS oLiq30:aMeses;
-              WHEN Empty(oLiq30:cPplReg) ;
+              WHEN Empty(oLiq30:cPplReg) .AND. !oDp:lConEsp ;
               ON CHANGE oLiq30:DESDEHASTA()
 
 // .AND. !oLiq30:lSemana) .OR. LEFT(oDp:cTipCon,1)="O"
@@ -232,14 +278,14 @@ PROCE MAIN(dFecha,cCodSuc,cNumReg,nAno,nMes,lFecha,dDesde,dHasta,lFrm,lSemana)
 
   // Debe buscar el Siguiente 
   @ 1,01 BUTTON oBtn PROMPT " > " ACTION oLiq30:NEXTMES(+1);
-         WHEN Empty(oLiq30:cPplReg)
+         WHEN Empty(oLiq30:cPplReg) .AND. !oDp:lConEsp
 
 //oLiq30:lSemana ;
 
   oBtn:cToolTip:="Mes Siguiente"
 
   @ 1,10 BUTTON oBtn PROMPT " < " ACTION oLiq30:NEXTMES(-1);
-         WHEN Empty(oLiq30:cPplReg)
+         WHEN Empty(oLiq30:cPplReg) .AND. !oDp:lConEsp
 
 // oLiq30:lSemana ;
 
@@ -298,7 +344,7 @@ PROCE MAIN(dFecha,cCodSuc,cNumReg,nAno,nMes,lFecha,dDesde,dHasta,lFrm,lSemana)
                   NAME "BITMAPS\Calendar.bmp";
                   ACTION LbxDate(oLiq30:oDesde ,oLiq30:dDesde);
                   SIZE 76,20;
-                  WHEN oLiq30:lSemana ;
+                  WHEN oLiq30:lEdit ;
                   FONT oFont
 
   oLiq30:oDesde:cToolTip:="F6: Calendario"
@@ -308,28 +354,18 @@ PROCE MAIN(dFecha,cCodSuc,cNumReg,nAno,nMes,lFecha,dDesde,dHasta,lFrm,lSemana)
                NAME "BITMAPS\Calendar.bmp";
                ACTION LbxDate(oLiq30:oHasta,oLiq30:dHasta);
                SIZE 76,20;
-               WHEN oLiq30:lSemana ;
+               WHEN oLiq30:lEdit ;
                FONT oFont
 
   oLiq30:oHasta:cToolTip:="F6: Calendario"
 
 
-  IF LEFT(oDp:cTipCon,1)="F"
 
-    @ 02,18  RADIO oLiq30:oRadio VAR oLiq30:nRadio;
-             ITEMS "&1ra", "&2da","&3ra", "&4ta" SIZE 60, 13 ;
-             ON CHANGE oLiq30:HACERQUINCENA();
-             WHEN oLiq30:lSemana .AND. LEFT(oDp:cTipCon,1)<>"O"
+ @ 02,18  RADIO oLiq30:oRadio VAR oLiq30:nRadio;
+          ITEMS "&Primera Quincena", "&Segunda Quincena" SIZE 60, 13 ;
+          ON CHANGE oLiq30:HACERQUINCENA();
+          WHEN Empty(oLiq30:cPplReg) .AND. oDp:lConEsp
 
-  ELSE
-
-    @ 02,18  RADIO oLiq30:oRadio VAR oLiq30:nRadio;
-             ITEMS "&Primera Quincena", "&Segunda Quincena" SIZE 60, 13 ;
-             ON CHANGE oLiq30:HACERQUINCENA();
-             WHEN oLiq30:lSemana .AND. LEFT(oDp:cTipCon,1)<>"O"
-
-
-  ENDIF
  
   oLiq30:Activate({|| oLiq30:oBar:=SETBOTBAR(oLiq30:oDlg,55,70)})
 
@@ -476,13 +512,15 @@ PROCE MAIN(dFecha,cCodSuc,cNumReg,nAno,nMes,lFecha,dDesde,dHasta,lFrm,lSemana)
     oLiq30:VALPLANIFICA(NIL,.T.)
   ENDIF
 
-  IF LEFT(oDp:cTipCon,1)="F"
+  IF !oDp:lConEsp .OR. LEFT(oDp:cTipCon,1)="F"
+    // LEFT(oDp:cTipCon,1)="F"
     oLiq30:oRadio:Hide()
   ENDIF
 
   oLiq30:oDesde:VarPut(oLiq30:dDesde,.T.)
   oLiq30:oHasta:VarPut(oLiq30:dHasta,.T.)
 
+// ? oLiq30:cPplReg,"oLiq30:cPplReg"
 // ? oLiq30:cPplReg,oLiq30:cNumReg,"cNumReg"
 
 RETURN NIL
@@ -844,6 +882,12 @@ FUNCTION SAVEFORMA30()
 
    SQLDELETE("DPLIQFORMA30",cWhere)
 
+   // segun calendario fiscal
+   cWhere:="F30_CODSUC"+GetWhere("=",oLiq30:cCodSuc)+" AND "+;
+           "F30_NUMREG"+GetWhere("=",oLiq30:cNumReg)
+
+   SQLDELETE("DPLIQFORMA30",cWhere)
+
    oTable:=OpenTable("SELECT * FROM DPLIQFORMA30 ",.F.)
    oTable:cWhere:=""
    oTable:Append()
@@ -943,13 +987,40 @@ FUNCTION VALPLANIFICA(lValida,lReset)
 
      // Caso de Contribuyente FORMAL
 
-     cWhere:="F30_FECHA"+GetWhere("=",dFecha)
+     IF LEFT(oDp:cTipCon,1)="F"
 
-//? cWhere
+       cWhere:="F30_FECHA"+GetWhere("=",dFecha)
+       dHasta:=SQLGET("VIEW_DPCALF30","F30_FCHDEC,F30_FECHA",cWhere)
+       dDesde:=DPSQLROW(2)
+       dFecha:=dHasta
 
-     dHasta:=SQLGET("VIEW_DPCALF30","F30_FCHDEC,F30_FECHA",cWhere)
-     dDesde:=DPSQLROW(2)
-     dFecha:=dHasta
+     ELSE
+
+       IF !oDp:lConEsp
+
+         dHasta:=FCHINIMES(dFecha)-1
+         dDesde:=FCHINIMES(dDesde)
+
+       ELSE
+
+         IF DAY(dFecha)<15
+            oLiq30:nRadio:=2
+            dHasta:=FCHINIMES(dFecha)-1
+            dDesde:=CTOD("16/"+LSTR(MONTH(dHasta))+"/"+LSTR(YEAR(dHasta)))
+         ELSE
+            oLiq30:nRadio:=1
+            dDesde:=FCHINIMES(dFecha)
+            dHasta:=CTOD("15/"+LSTR(MONTH(dDesde))+"/"+LSTR(YEAR(dDesde)))
+        ENDIF
+
+        // oLiq30:oRadio:Refresh(.T.)
+
+       ENDIF
+
+       oLiq30:nMes:=MONTH(dDesde)
+
+     ENDIF
+
 
      IF ValType(oLiq30:oDesde)="O"
         oLiq30:oDesde:VarPut(dDesde,.T.)
@@ -971,7 +1042,7 @@ FUNCTION VALPLANIFICA(lValida,lReset)
 
   IF !Empty(cNumero) 
 
-    oLiq30:cPplReg :=cNumero
+    // oLiq30:cPplReg :=cNumero
     oLiq30:cNumReg :=cNumero
     oLiq30:dFecha  :=dFecha
 
